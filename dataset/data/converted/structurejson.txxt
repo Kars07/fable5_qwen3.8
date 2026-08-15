@@ -1,0 +1,156 @@
+  ### 1. Structure of the Converted .jsonl Files                                                       
+                                                                                                       
+  We created three distinct formats in converted so you can train with any post-training framework     
+  (Axolotl, LLaMA-Factory, TRL/Hugging Face SFTTrainer, or Unsloth):                                   
+  ──────                                                                                               
+  #### Format A: fable5_sft_qwen_native.jsonl (Recommended for Qwen 3.8 / 2.5)                         
+                                                                                                       
+  This format maps directly to the official Qwen 3.8 / 2.5 chat template, which separates Chain of     
+  Thought reasoning from tool invocations and text outputs.                                            
+                                                                                                       
+  ##### Schema Breakdown:                                                                              
+                                                                                                       
+    {                                                                                                  
+      "id": "f956721a-0af7-4bdc-8678-3a493d8fcd39#5",                                                  
+      "session": "f956721a-0af7-4bdc-8678-3a493d8fcd39",                                               
+      "output_type": "tool_use",                                                                       
+      "origin": "local",                                                                               
+      "messages": [                                                                                    
+        {                                                                                              
+          "role": "system",                                                                            
+          "content": "You are an expert AI coding assistant..."                                        
+        },                                                                                             
+        {                                                                                              
+          "role": "user",                                                                              
+          "content": "Make a new one, it should be a fast paced multiplayer FPS..."                    
+        },                                                                                             
+        {                                                                                              
+          "role": "assistant",                                                                         
+          "content": "",                                                                               
+          "tool_calls": [                                                                              
+            {                                                                                          
+              "type": "function",                                                                      
+              "function": {                                                                            
+                "name": "Bash",                                                                        
+                "arguments": {                                                                         
+                  "command": "cat package.json"                                                        
+                }                                                                                      
+              }                                                                                        
+            }                                                                                          
+          ]                                                                                            
+        },                                                                                             
+        {                                                                                              
+          "role": "tool",                                                                              
+          "content": "{\"name\": \"ai-archives\", \"dependencies\": {...}}"                            
+        },                                                                                             
+        {                                                                                              
+          "role": "assistant",                                                                         
+          "reasoning_content": "Alright, I've got a decent overview of the repository...",             
+          "content": "",                                                                               
+          "tool_calls": [                                                                              
+            {                                                                                          
+              "type": "function",                                                                      
+              "function": {                                                                            
+                "name": "Read",                                                                        
+                "arguments": {                                                                         
+                  "file_path": "/home/lane/AIArchives/server/index.js"                                 
+                }                                                                                      
+              }                                                                                        
+            }                                                                                          
+          ]                                                                                            
+        }                                                                                              
+      ]                                                                                                
+    }                                                                                                  
+                                                                                                       
+  ##### How Qwen's Tokenizer Renders This:                                                             
+                                                                                                       
+    <|im_start|>system                                                                                 
+    You are an expert AI coding assistant...<|im_end|>                                                 
+    <|im_start|>user                                                                                   
+    Make a new one...<|im_end|>                                                                        
+    <|im_start|>assistant                                                                              
+    <tool_call>                                                                                        
+    <function=Bash>                                                                                    
+    <parameter=command>                                                                                
+    cat package.json                                                                                   
+    </parameter>                                                                                       
+    </function>                                                                                        
+    </tool_call><|im_end|>                                                                             
+    <|im_start|>user                                                                                   
+    <tool_response>                                                                                    
+    {"name": "ai-archives", "dependencies": {...}}                                                     
+    </tool_response><|im_end|>                                                                         
+    <|im_start|>assistant                                                                              
+    <think>                                                                                            
+    Alright, I've got a decent overview of the repository...                                           
+    </think>                                                                                           
+                                                                                                       
+    <tool_call>                                                                                        
+    <function=Read>                                                                                    
+    <parameter=file_path>                                                                              
+    /home/lane/AIArchives/server/index.js                                                              
+    </parameter>                                                                                       
+    </function>                                                                                        
+    </tool_call><|im_end|>                                                                             
+  ──────                                                                                               
+  #### Format B: fable5_sft_chatml_inline.jsonl (Standard SFT format)                                  
+                                                                                                       
+  In this format, the thinking trace is placed inline as <think>\n...\n</think> directly inside        
+  content.                                                                                             
+                                                                                                       
+  ##### Schema Breakdown:                                                                              
+                                                                                                       
+    {                                                                                                  
+      "id": "f956721a-0af7-4bdc-8678-3a493d8fcd39#5",                                                  
+      "messages": [                                                                                    
+        {"role": "system", "content": "You are an expert AI coding assistant..."},                     
+        {"role": "user", "content": "Make a new one..."},                                              
+        {                                                                                              
+          "role": "assistant",                                                                         
+          "content": "<think>\nAlright, I've got a decent overview...                                  
+  \n</think>\n\n<tool_call>\n<function=Read>\n<parameter=file_path>\n/home/lane/AIArchives/server/index
+  .js\n</parameter>\n</function>\n</tool_call>"                                                        
+        }                                                                                              
+      ]                                                                                                
+    }                                                                                                  
+                                                                                                       
+  Best used if your training framework does not yet support the reasoning_content dictionary key.      
+  ──────                                                                                               
+  #### Format C: fable5_sft_sessions.jsonl (Full Multi-Turn Sessions)                                  
+                                                                                                       
+  Contains 60 complete, uninterrupted developer sessions (from initial user prompt to finished         
+  project). Each row contains between 15 to 400+ sequential turns of tool use, observations, reasoning,
+  and code generation.                                                                                 
+  ──────                                                                                               
+  ### 2. How Post-Training On These Traces Teaches Fable 5 Reasoning                                   
+                                                                                                       
+  During SFT, the loss calculation uses Loss Masking (as implemented in validation.py:305-330):        
+                                                                                                       
+    [SYSTEM PROMPT]          --> Label = -100  (Masked, No Loss)                                       
+    [USER QUERY]             --> Label = -100  (Masked, No Loss)                                       
+    [PRIOR TOOL RESPONSES]   --> Label = -100  (Masked, No Loss)                                       
+    [<think> ... </think>]   --> Label = TOKENS (SUPERVISED WITH CROSS-ENTROPY LOSS)                   
+    [<tool_call> ... ]       --> Label = TOKENS (SUPERVISED WITH CROSS-ENTROPY LOSS)                   
+                                                                                                       
+  Because both the reasoning block (cot) and the concrete action (output) are supervised together, the 
+  model learns the direct causal relationship between thinking and tool invocation:                    
+                                                                                                       
+    graph LR                                                                                           
+        A["Observations / Terminal Output"] --> B["<think> Fable-5 Reasoning: Root Cause Analysis &    
+  Planning </think>"]                                                                                  
+        B --> C["Precise Tool Call (Bash, Edit, Read, Write)"]                                         
+                                                                                                       
+  #### What Behaviors the Model Internalizes from Fable 5:                                             
+                                                                                                       
+  1. Exploratory Pre-Computation:                                                                      
+  Before modifying code, the model learns to think through directory structures, check package.json /  
+  build scripts, and read definitions before issuing edits.                                            
+  2. Observation-Driven Self-Correction:                                                               
+  When a compiler error or tool failure arrives in TOOL RESULT, the model's <think> block diagnoses the
+  error trace step-by-step rather than blindly repeating failed commands.                              
+  3. High-Signal Tool Calling:                                                                         
+  The model learns when to use Bash (compiling, grep, test runners) vs Edit (surgical line-targeted    
+  edits) vs Write (fresh module creation) with valid JSON parameters.                                  
+  4. Autonomous Completion Verification:                                                               
+  The model learns Fable 5's pattern of running playtests, headless checks, or smoke tests to verify   
+  changes before producing the final summary text.       

@@ -1,0 +1,24 @@
+# Ignore everything except task1_sft_grpo
+dataset_dataloaders/
+distributed_training/
+mixed_precision_amp/
+sft/
+tensors/
+external_repos/
+verifiers/
+
+# Model weights and caches
+.env
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.jsonl
+
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+primerl_docs/
+verifiers/
