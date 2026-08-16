@@ -2,16 +2,17 @@ model_id: "Qwen/Qwen3.8-27B"
 tokenizer_id: "Qwen/Qwen3.8-27B"
 dataset_name_or_path: "dataset/data/converted/fable5_sft_train.jsonl"
 eval_dataset_path: "dataset/data/converted/fable5_sft_val.jsonl"
-output_dir: "artifacts/checkpoints/qwen_sft_lora"
+output_dir: "artifacts/checkpoints/qwen_4bit_lora"
 
 # Sequence and Batching
 max_seq_length: 8192
 batch_size: 1
-gradient_accumulation_steps: 16
+gradient_accumulation_steps: 4
 num_epochs: 3
 
 # Precision & Optimization
 dtype: "bfloat16"
+quantization: "4bit"
 learning_rate: 2.0e-5
 weight_decay: 0.01
 warmup_ratio: 0.05
