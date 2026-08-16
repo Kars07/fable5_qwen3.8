@@ -2,7 +2,6 @@
 dataset_dataloaders/
 distributed_training/
 mixed_precision_amp/
-sft/
 tensors/
 external_repos/
 verifiers/

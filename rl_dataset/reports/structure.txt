@@ -1,0 +1,233 @@
+### 🔍 Dataset Sample Inspection: Train vs. Validation Splits                                  
+                                                                                                 
+  Here is an in-depth breakdown of 5 representative samples each from                            
+  nemotron_terminal_rl_train.jsonl and nemotron_terminal_rl_val.jsonl.                           
+  ──────                                                                                         
+  ### 🧩 1. The Core Decision Structure                                                          
+                                                                                                 
+  Every record represents a single decision point at turn T in a multi-turn Linux terminal task: 
+                                                                                                 
+  1. messages: Contains the full history up to turn T:                                           
+      • [0] System Prompt: Operating instructions for the AI terminal agent.                     
+      • [1] Initial User Prompt: The natural language operational problem description.           
+      • [2...N] Past Interaction: Alternating previous assistant tool actions and real terminal  
+      stdout/stderr outputs.                                                                     
+  2. reference_completion (Model Target Answer):                                                 
+      • Reasoning (<think> ... </think>): Diagnoses the current terminal buffer and formulates a 
+      concise, step-by-step Plan.                                                                
+      • Action: Either emits structured bash commands via <tool_call> or signals goal fulfillment
+      via Task complete..                                                                        
+                                                                                                 
+  ──────                                                                                         
+  ## 🏋️ 5 Samples from Training Set (nemotron_terminal_rl_train.jsonl)                           
+  ──────                                                                                         
+  #### 🔹 Train Sample 1: Initial Exploration Phase (Step 0)                                     
+                                                                                                 
+  • Task: hpc-trailer-collation-verifier (HPC binary queue file pipeline)                        
+  • Turn: Step 0 of 12 | History: 2 messages                                                     
+                                                                                                 
+    <think>                                                                                      
+    I'm at the /opt/hpc directory. I need to create a pipeline.py script that processes HPC job  
+  queue files. First, I need to understand the environment: the binary trailer formats (v1 and   
+  v2), the database structure, and the rules configuration.                                      
+                                                                                                 
+    Plan: Start by exploring the directory structure, examining the queue files, running the     
+  reference parser to understand binary formats, checking the database schema, and reviewing     
+  rules.yaml.                                                                                    
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["ls -la /var/hpc/queue/\n", "ls -la              
+  /opt/hpc/tools/\n", "cat /opt/hpc/rules.yaml\n", "sqlite3 /var/hpc/auth.db \".schema\"\n"]}}   
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔹 Train Sample 2: Deep Reverse Engineering & Hex Dumps (Step 2)                          
+                                                                                                 
+  • Task: hpc-trailer-collation-verifier                                                         
+  • Turn: Step 2 of 12 | History: 6 messages                                                     
+                                                                                                 
+    <think>                                                                                      
+    I now have the reference parser output for all 20 files, the database contents, and the rules.
+  I need to understand the exact binary layout to parse the files myself in Python. Let me       
+  examine the raw hex of a few files to reverse-engineer the binary trailer format.              
+                                                                                                 
+    Plan: Hex dump a few files (both v1 and v2) to understand the binary trailer layout, then    
+  write the pipeline.py script.                                                                  
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["xxd /var/hpc/queue/req_01.dat\n", "xxd          
+  /var/hpc/queue/req_03.dat\n", "xxd /var/hpc/queue/req_10.dat\n", "xxd /var/hpc/queue/req_16.   
+  dat\n", "xxd /var/hpc/queue/req_13.dat\n", "xxd /var/hpc/queue/req_05.dat\n"]}}                
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔹 Train Sample 3: Multi-Component State Diagnosis (Step 1)                               
+                                                                                                 
+  • Task: fleet-surcharge-processor (Go + SQLite + Ledger reconciliation)                        
+  • Turn: Step 1 of 19 | History: 4 messages                                                     
+                                                                                                 
+    <think>                                                                                      
+    I've read the spec.md. Now I need to examine the tuning.conf, registry database, billing     
+  ledger, and recovery volume structure.                                                         
+                                                                                                 
+    Plan: 1. Read tuning.conf                                                                    
+    2. Examine the SQLite registry database                                                      
+    3. Read the billing ledger                                                                   
+    4. Explore the recovery volume structure                                                     
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["cat /app/config/tuning.conf\n", "sqlite3        
+  /opt/fleet/registry.db \".schema\"\n", "sqlite3 /opt/fleet/registry.db \"SELECT * FROM devices;
+  \"\n", "sqlite3 /opt/fleet/registry.db \"SELECT * FROM zones;\"\n", "cat                       
+  /opt/fleet/billing_ledger.json\n", "find /opt/fleet/recovery/ -type f | sort\n"]}}             
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔹 Train Sample 4: Code Verification & Compilation (Step 9)                               
+                                                                                                 
+  • Task: fleet-surcharge-processor                                                              
+  • Turn: Step 9 of 19 | History: 20 messages                                                    
+                                                                                                 
+    <think>                                                                                      
+    The fix was applied but I need to verify the full line is correct and not split across lines 
+  improperly. Let me check the file and recompile.                                               
+                                                                                                 
+    Plan: 1. Check the actual line content around line 159                                       
+    2. Fix if needed                                                                             
+    3. Recompile                                                                                 
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["sed -n '157,162p' /app/fleet-processor/main.    
+  go\n", "cd /app/fleet-processor && go build -o /usr/local/bin/fleet-processor . 2>&1\n"]}}     
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔹 Train Sample 5: Goal Verification & Task Completion Boundary (Step 17)                 
+                                                                                                 
+  • Task: fleet-surcharge-processor                                                              
+  • Turn: Step 17 of 19 (Final Step) | History: 36 messages                                      
+                                                                                                 
+    <think>                                                                                      
+    All output files are verified:                                                               
+    - `/usr/local/bin/fleet-processor` binary exists ✓                                           
+    - `surcharge_total.txt`: 925075.63 (net new aggregate in dollars and cents) ✓                
+    - `processed_count.txt`: 138361 (valid checkpoint count) ✓                                   
+    - `timeline_trace.txt`: 138361 lines, ordered by LogicalOffset ✓                             
+    - `reconciliation.json`: 30 devices, top-level and inner keys sorted lexicographically, all  
+  required fields present, totals consistent ✓                                                   
+                                                                                                 
+    Plan: The task is complete. All required output files have been generated correctly.         
+    </think>                                                                                     
+    Task complete.                                                                               
+  ──────                                                                                         
+  ## 🎯 5 Samples from Holdout Validation Set (nemotron_terminal_rl_val.jsonl)                   
+  ──────                                                                                         
+  #### 🔸 Val Sample 1: Initial Investigation (Step 0)                                           
+                                                                                                 
+  • Task: matchmaker-batch-capacity (Financial Portfolio Optimization in CVXPY)                  
+  • Turn: Step 0 of 7 | History: 2 messages                                                      
+                                                                                                 
+    <think>                                                                                      
+    I'm at the /app directory. The task describes a failing batch optimization pipeline that     
+  processes three portfolios (conservative, balanced, growth). I need to investigate the logs and
+  system components to find and fix the root cause.                                              
+                                                                                                 
+    Plan: Start by exploring the directory structure, checking the batch logs, and reviewing key 
+  configuration files to understand the current state and identify issues.                       
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["ls -la\n", "cat /var/log/batch/*.log 2>/dev/null
+  ||
+  ls -la /var/log/batch/\n", "cat /app/docs/QUANT_NOTES.md\n"]}}                                 
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔸 Val Sample 2: Root-Cause Diagnosis via Docs & Logs (Step 1)                            
+                                                                                                 
+  • Task: matchmaker-batch-capacity                                                              
+  • Turn: Step 1 of 7 | History: 4 messages                                                      
+                                                                                                 
+    <think>                                                                                      
+    The batch log shows the error occurs at the 'balanced' portfolio with a DCPError. The        
+  QUANT_NOTES.md explains that CVXPY's strict DCP validation rejects covariance matrices with    
+  tiny negative eigenvalues before the solver sees them. The recommended fix is to use `cp.      
+  psd_wrap()` to bypass DCP validation while preserving the mathematical structure. I also need  
+  to check configuration for key name issues.                                                    
+                                                                                                 
+    Plan: Examine all the source files: the batch script, scheduler config, data loader,         
+  optimizer, validator, and archiver to identify all issues.                                     
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["cat /app/run_batch.sh\n", "cat                  
+  /app/scheduler/batch_config.yaml\n", "cat /app/data_loader/load_portfolio.py\n", "cat          
+  /app/optimizer/optimize.py\n", "cat /app/validator/validate.py\n", "cat                        
+  /app/archiver/archive_results.py\n"]}}                                                         
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔸 Val Sample 3: Multi-Point Defect Synthesis (Step 2)                                    
+                                                                                                 
+  • Task: matchmaker-batch-capacity                                                              
+  • Turn: Step 2 of 7 | History: 6 messages                                                      
+                                                                                                 
+    <think>                                                                                      
+    I've identified several issues:                                                              
+    1. **Optimizer**: `cp.quad_form(w, Sigma)` fails with DCPError when covariance matrix isn't  
+  perfectly PSD. Need to use `cp.psd_wrap(Sigma)` per QUANT_NOTES.md.                            
+    2. **Config typo**: `threshhold` (double 'h') in balanced portfolio should be `threshold` -  
+  the validator looks for `validation.threshold`.                                                
+    3. **Config dependency**: Growth has `depends_on: conservative` but should be `depends_on:   
+  balanced`.                                                                                     
+    4. **Config date_format**: Currently `%Y%m%d` but needs to be `%Y-%m-%d` for ISO 8601.       
+    5. **Data loader**: Need to verify covariance matrix loading is correct.                     
+                                                                                                 
+    Plan: First check the data files to see if there's a loading issue, then fix all identified  
+  issues.                                                                                        
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["ls -la /app/data/\n", "ls -la                   
+  /app/data/conservative/ /app/data/balanced/ /app/data/growth/\n", "head -3                     
+  /app/data/conservative/covariance.csv\n", "head -3 /app/data/balanced/covariance.csv\n", "head 
+  -3 /app/data/growth/covariance.csv\n", "head -3 /app/data/conservative/expected_returns.csv\n",
+  "head -3 /app/data/balanced/expected_returns.csv\n", "head -3                                  
+  /app/data/growth/expected_returns.csv\n"]}}                                                    
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔸 Val Sample 4: Output Archival Verification (Step 4)                                    
+                                                                                                 
+  • Task: matchmaker-batch-capacity                                                              
+  • Turn: Step 4 of 7 | History: 10 messages                                                     
+                                                                                                 
+    <think>                                                                                      
+    The batch completed successfully! All three portfolios (conservative, balanced, growth) were 
+  optimized, validated, and archived. Let me verify the expected outputs exist and are correct.  
+                                                                                                 
+    Plan: Verify the archive files and batch summary JSON are correctly produced.                
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["ls -la /app/archive/\n", "cat                   
+  /app/results/batch_summary.json\n", "head -5 /app/archive/conservative_2026-04-17.csv\n"]}}    
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  #### 🔸 Val Sample 5: Rust Binary & Cache Audit Discovery (Step 0)                             
+                                                                                                 
+  • Task: fuzz-cache-auditor (Rust binary reverse engineering & .fcc cache format)               
+  • Turn: Step 0 of 26 | History: 2 messages                                                     
+                                                                                                 
+    <think>                                                                                      
+    I'm at the project directory /app/fuzz-cache-auditor. I need to build a complete audit system
+  with three Rust binaries. First, I need to understand the project structure, the .fcc file     
+  format, and existing files.                                                                    
+                                                                                                 
+    Plan: Start by exploring the project structure, examining the fixtures directory for the     
+  cache generator script and policy file, and looking at the corpus directory for sample .fcc    
+  files. This will help me understand the binary format and requirements.                        
+    </think>                                                                                     
+    <tool_call>                                                                                  
+    {"name": "bash", "arguments": {"commands": ["ls -la\n", "find . -type f -name '*.rs' -o -name
+  '*.toml' -o -name '*.py' 2>/dev/null | head -50\n", "ls -la corpus/ 2>/dev/null || echo 'No    
+  corpus dir'\n", "ls -la fixtures/ 2>/dev/null || echo 'No fixtures dir'\n"]}}                  
+    </tool_call>                                                                                 
+  ──────                                                                                         
+  ### 💡 Key Takeaways from Inspection                                                           
+                                                                                                 
+  1. Identical Reasoning Structure: Both train and validation sets follow the exact <think> →    
+  <tool_call> syntax that our fine-tuned Qwen 27B model learned in SFT.                          
+  2. Trajectory Integrity: Every decision step contains the real accumulated terminal history    
+  from turn 0 up to turn T, allowing the model to condition its next move on past command returns.
+  3. Diverse Action Vocabulary: In addition to standard bash utilities (ls, cat, grep), the model
+  learns specialized tools like xxd, sqlite3, sed, gdb, and go build.        
