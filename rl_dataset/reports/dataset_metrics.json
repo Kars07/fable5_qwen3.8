@@ -1,0 +1,235 @@
+{
+  "dataset_summary": {
+    "dataset_filename": "atcb_terminal_pivot_release_final_v2.jsonl",
+    "file_size_mb": 1308.88,
+    "total_records": 31111,
+    "unique_tasks_count": 630,
+    "unique_trajectories_count": 2716,
+    "teacher_models": {
+      "zai-org/GLM-5.1": 11098,
+      "zai-org/GLM-5.1-FP8": 20013
+    },
+    "harnesses": {
+      "terminus_2": 31111
+    },
+    "task_completion_rate_pct": 8.84,
+    "action_decision_rate_pct": 91.16
+  },
+  "trajectory_statistics": {
+    "pivot_turn_index": {
+      "min": 0.0,
+      "mean": 9.052039471569541,
+      "p25": 3.0,
+      "p50": 7.0,
+      "p75": 12.0,
+      "p90": 20.0,
+      "p95": 26.0,
+      "p99": 42.0,
+      "max": 77.0
+    },
+    "total_source_turns": {
+      "min": 3.0,
+      "mean": 20.31217254347337,
+      "p25": 13.0,
+      "p50": 17.0,
+      "p75": 25.0,
+      "p90": 35.0,
+      "p95": 43.0,
+      "p99": 63.0,
+      "max": 78.0
+    },
+    "prompt_message_count": {
+      "min": 1.0,
+      "mean": 19.104078943139083,
+      "p25": 7.0,
+      "p50": 15.0,
+      "p75": 25.0,
+      "p90": 41.0,
+      "p95": 53.0,
+      "p99": 85.0,
+      "max": 155.0
+    }
+  },
+  "content_length_statistics": {
+    "prompt_char_length": {
+      "min": 3335.0,
+      "mean": 39873.23281154576,
+      "p25": 14611.0,
+      "p50": 29588.0,
+      "p75": 55878.0,
+      "p90": 86412.0,
+      "p95": 107638.0,
+      "p99": 147188.0,
+      "max": 293224.0
+    },
+    "prompt_approx_token_length": {
+      "min": 833.0,
+      "mean": 9967.933624762945,
+      "p25": 3652.0,
+      "p50": 7397.0,
+      "p75": 13969.0,
+      "p90": 21603.0,
+      "p95": 26909.0,
+      "p99": 36797.0,
+      "max": 73306.0
+    },
+    "analysis_char_length": {
+      "min": 34.0,
+      "mean": 310.9995821413648,
+      "p25": 157.0,
+      "p50": 230.0,
+      "p75": 351.0,
+      "p90": 638.0,
+      "p95": 915.0,
+      "p99": 1251.0,
+      "max": 5786.0
+    },
+    "plan_char_length": {
+      "min": 16.0,
+      "mean": 138.96056057343063,
+      "p25": 90.0,
+      "p50": 126.0,
+      "p75": 171.0,
+      "p90": 220.0,
+      "p95": 261.0,
+      "p99": 382.0,
+      "max": 1274.0
+    },
+    "total_answer_char_length": {
+      "min": 57.0,
+      "mean": 678.3342226222237,
+      "p25": 434.0,
+      "p50": 622.0,
+      "p75": 884.0,
+      "p90": 1157.0,
+      "p95": 1306.0,
+      "p99": 1584.0,
+      "max": 5994.0
+    }
+  },
+  "command_statistics": {
+    "commands_per_decision_step": {
+      "min": 0.0,
+      "mean": 3.3600012857188775,
+      "p25": 1.0,
+      "p50": 3.0,
+      "p75": 5.0,
+      "p90": 6.0,
+      "p95": 8.0,
+      "p99": 10.0,
+      "max": 21.0
+    },
+    "top_30_commands": {
+      "cat": 34362,
+      "ls": 11822,
+      "python3": 9791,
+      "head": 7411,
+      "echo": 7119,
+      "1": 6411,
+      "\"": 6166,
+      "grep": 5733,
+      "sqlite3": 4440,
+      "wc": 3294,
+      "for": 3115,
+      "find": 2962,
+      "import": 2962,
+      "#": 2956,
+      "cd": 2835,
+      "xxd": 2155,
+      "sed": 2094,
+      "C-c": 1933,
+      "redis-cli": 1892,
+      "rm": 1875,
+      "with": 1752,
+      "su": 1686,
+      "psql": 1578,
+      "'": 1443,
+      "if": 1353,
+      "tail": 1274,
+      "bash": 1230,
+      "make": 1223,
+      "EOF": 1176,
+      "curl": 1058
+    }
+  },
+  "domain_distribution": {
+    "System Administration & Automation": 13923,
+    "Data Pipelines & Storage": 10278,
+    "Security & SIEM Audit": 4062,
+    "Build, CI/CD & Testing": 1439,
+    "Embedded, SCADA & Industrial": 920,
+    "Service Diagnostics & Crash Recovery": 489
+  },
+  "top_20_tasks_by_frequency": {
+    "implement-unit-conversion-proof-checker": 187,
+    "claims-notebook-state": 185,
+    "strict-rbac-compliance": 162,
+    "kiosk-evidence-applier": 147,
+    "rail-yard-accumulation-coordinator": 146,
+    "hft-dark-pool-settlement-pipeline": 142,
+    "stale-cache-rejection": 138,
+    "airgapped-evidence-fuzzer": 135,
+    "broadcast-playout-reconciliation": 123,
+    "rag-calibration-orchestrator": 121,
+    "museum-cluster-ingest": 120,
+    "hpc-telemetry-harness": 118,
+    "maritime-stream-canonicalization": 118,
+    "hpc-mesh-route-planner": 114,
+    "booth-ingest-hub": 113,
+    "airgapped-evidence-kiosk-loader": 110,
+    "c2-telemetry-reconstructor": 109,
+    "implement-yara-rule-regression-minimizer": 109,
+    "ca-dynamics-correlator": 108,
+    "lab-envelope-batch-rollback": 107
+  },
+  "samples": [
+    {
+      "uuid": "t2_pre_rp_c0378f5f3c4c05a0868c9831e5698d2f",
+      "task_name": "telemetry-pipeline-audit-2",
+      "domain": "Security & SIEM Audit",
+      "turn_index": 0,
+      "total_turns": 41,
+      "input_messages_count": 1,
+      "analysis_snippet": "I'm at the project root directory. I need to explore the project structure, understand the existing code, and then implement the missing pipeline logic.",
+      "plan_snippet": "First, I'll explore the directory structure to understand what files exist, then read the key files to understand the current implementation and what needs to be done.",
+      "commands": [
+        "find /app/ingest_pipeline -type f | head -50",
+        "find /data -type f | head -20",
+        "ls -la /app/reports/ 2>/dev/null || echo 'reports dir does not exist'"
+      ],
+      "task_complete": false
+    },
+    {
+      "uuid": "t2_pre_rp_22d7dbbdf741367b8e8da0a1c7c49101",
+      "task_name": "telemetry-pipeline-audit-2",
+      "domain": "Security & SIEM Audit",
+      "turn_index": 1,
+      "total_turns": 41,
+      "input_messages_count": 3,
+      "analysis_snippet": "I can see the project structure. There are several key files: config/security.json, cli.py, normalizer.py, plugins/auditor.py, plugins/validators.py, plugins/minimizer.py, run.py, and tests/test_smoke",
+      "plan_snippet": "Read all the existing source files to understand the current implementation, then look at some sample data files to understand the envelope format.",
+      "commands": [
+        "cat /app/ingest_pipeline/config/security.json",
+        "cat /app/ingest_pipeline/__init__.py",
+        "cat /app/ingest_pipeline/cli.py"
+      ],
+      "task_complete": false
+    },
+    {
+      "uuid": "t2_pre_rp_87567f59afe083f9494c32ca44aafa7c",
+      "task_name": "telemetry-pipeline-audit-2",
+      "domain": "Security & SIEM Audit",
+      "turn_index": 2,
+      "total_turns": 41,
+      "input_messages_count": 5,
+      "analysis_snippet": "I've read the config file (contains crypto iterations and gadget memory boundaries), the empty __init__.py, and the stub files for cli.py and normalizer.py. I need to read the plugins and test files n",
+      "plan_snippet": "Continue reading the remaining source files - the plugins and the test suite - to understand what needs to be implemented.",
+      "commands": [
+        "cat /app/ingest_pipeline/plugins/__init__.py",
+        "cat /app/ingest_pipeline/plugins/validators.py",
+        "cat /app/ingest_pipeline/plugins/minimizer.py"
+      ],
+      "task_complete": false
+    }
+  ]
+}
