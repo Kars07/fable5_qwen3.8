@@ -7,7 +7,10 @@ from types import SimpleNamespace
 import pytest
 from verifiers.v1.types import Usage
 
-from scripts.run_harbor_e2b import command_from_response, validate_minimal_dockerfile
+try:
+    from rl.scripts.run_harbor_e2b import command_from_response, validate_minimal_dockerfile
+except ImportError:
+    from scripts.run_harbor_e2b import command_from_response, validate_minimal_dockerfile
 
 
 def test_harbor_action_comes_from_typed_execute_call() -> None:

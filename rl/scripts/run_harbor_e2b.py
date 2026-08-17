@@ -15,7 +15,13 @@ from verifiers.v1.graph import MessageNode
 from verifiers.v1.tasksets.harbor import HarborConfig, HarborTaskset
 from verifiers.v1.types import AssistantMessage, Sampling, Usage, UserMessage
 
-from task2_runtime import E2BConfig, E2BRuntime
+try:
+    from rl.e2b_sandbox.e2b import E2BConfig, E2BRuntime
+except ImportError:
+    try:
+        from e2b_sandbox.e2b import E2BConfig, E2BRuntime
+    except ImportError:
+        from task2_runtime import E2BConfig, E2BRuntime
 
 
 def validate_minimal_dockerfile(task_dir: Path) -> dict[str, object]:

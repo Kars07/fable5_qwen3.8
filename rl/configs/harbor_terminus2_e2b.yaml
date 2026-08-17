@@ -1,0 +1,12 @@
+# Harbor Terminal-Bench 2.0 Evaluation on E2B Sandbox MicroVMs
+dataset: "terminal-bench/terminal-bench-2"
+agent: "terminus_2"
+model: "openai/Qwen/Qwen3.8-27B"
+environment: "e2b"
+num_tasks: 32
+
+client:
+  base_url: "http://127.0.0.1:8000/v1"
+  api_key_var: "OPENAI_API_KEY"
+
+output_dir: "/outputs/harbor-terminus2-e2b"

@@ -1,0 +1,22 @@
+# Verifiers v1 Evaluation Configuration for Terminal Pivot Benchmark
+model: "Qwen/Qwen3.8-27B"
+
+sampling:
+  temperature: 0.6
+  max_tokens: 1024
+
+env:
+  taskset:
+    id: "rl_pivot_terminal"
+    split: "val"
+    num_tasks: 50
+
+  agent:
+    harness:
+      id: "terminus_2"
+    runtime:
+      type: "subprocess"
+
+output_dir: "/outputs/terminal-pivot-eval"
+num_rollouts: 1
+verbose: true

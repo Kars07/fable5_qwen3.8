@@ -3,16 +3,30 @@
 # dependencies = ["harbor=={version}"]
 # ///
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from harbor.agents.terminus_2 import Terminus2
-from harbor.environments.base import ExecResult
-from harbor.models.agent.context import AgentContext
-from harbor.models.trial.paths import EnvironmentPaths
+try:
+    from harbor.agents.terminus_2 import Terminus2
+    from harbor.environments.base import ExecResult
+    from harbor.models.agent.context import AgentContext
+    from harbor.models.trial.paths import EnvironmentPaths
+except ImportError:
+    Terminus2 = None  # type: ignore
+    AgentContext = None  # type: ignore
+    EnvironmentPaths = None  # type: ignore
+
+    @dataclass
+    class ExecResult:
+        stdout: str
+        stderr: str
+        return_code: int
 
 
 class LocalEnvironment:
@@ -61,7 +75,11 @@ async def main() -> None:
     model, system_prompt, task = args.model, args.system_prompt, args.task
     logs_dir = Path(os.environ["TMUX_TMPDIR"])
     logs_dir.mkdir(mode=0o700, exist_ok=True)
-    EnvironmentPaths.agent_dir = PurePosixPath(logs_dir)
+    if EnvironmentPaths is not None:
+        EnvironmentPaths.agent_dir = PurePosixPath(logs_dir)
+
+    if Terminus2 is None:
+        raise RuntimeError("Harbor package must be installed to run Terminus2 agent.")
 
     agent = Terminus2(
         logs_dir=logs_dir,

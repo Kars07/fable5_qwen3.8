@@ -1,4 +1,4 @@
-from verifiers.v1.harnesses.terminus_2.harness import (
+from rl.harnesses.terminus_2.harness import (
     Terminus2Harness,
     Terminus2HarnessConfig,
 )

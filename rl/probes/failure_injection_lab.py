@@ -8,7 +8,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from probes.loss_reference import default_loss, grpo_advantages
+try:
+    from rl.probes.loss_reference import default_loss, grpo_advantages
+except ImportError:
+    from probes.loss_reference import default_loss, grpo_advantages
 from tiny_tooluse_v1.taskset import TooluseTask
 from verifiers.v1.configs.harness import HarnessConfig
 from verifiers.v1.harness import Harness

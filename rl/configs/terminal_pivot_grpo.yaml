@@ -1,0 +1,69 @@
+# Nemotron Terminal Pivot GRPO Reinforcement Learning Configuration
+max_steps: 100
+seq_len: 8192
+
+model:
+  name: "Qwen/Qwen3.8-27B"
+  adapter_path: "/opt/artifacts/checkpoints/qwen_4bit_lora/best_checkpoint"
+
+orchestrator:
+  batch_size: 8
+  group_size: 4
+  max_inflight_episodes: 8
+  algo:
+    type: "grpo"
+    adv_tau: 1.0
+    kl_tau: 0.05
+    dppo_mask_high: 0.2
+    dppo_mask_low: 0.2
+
+  renderer:
+    name: "qwen3"
+
+  train:
+    sampling:
+      temperature: 0.7
+      top_p: 0.95
+      max_completion_tokens: 1024
+
+    source:
+      - name: "nemotron-terminal-train"
+        env:
+          taskset:
+            id: "rl_pivot_terminal"
+            split: "train"
+            num_tasks: 2000
+          agent:
+            max_turns: 1
+            harness:
+              id: "terminus_2"
+            runtime:
+              type: "subprocess"
+
+  eval:
+    interval: 20
+    source:
+      - name: "nemotron-terminal-val"
+        num_examples: 50
+        env:
+          taskset:
+            id: "rl_pivot_terminal"
+            split: "val"
+            num_tasks: 100
+          agent:
+            max_turns: 1
+            harness:
+              id: "terminus_2"
+            runtime:
+              type: "subprocess"
+
+trainer:
+  optim:
+    lr: 5.0e-6
+    weight_decay: 0.01
+    warmup_steps: 5
+    cosine_decay: true
+
+ckpt:
+  interval: 20
+  save_dir: "/checkpoints/nemotron_terminal_grpo"

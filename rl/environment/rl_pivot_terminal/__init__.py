@@ -1,3 +1,8 @@
-from tiny_terminal_v1.taskset import TinyTerminalTaskset
+"""Nemotron Terminal Pivot environment for Verifiers v1."""
 
-__all__ = ["TinyTerminalTaskset"]
+from rl.environment.rl_pivot_terminal.taskset import (
+    TerminalPivotConfig,
+    TerminalPivotTask,
+    TerminalPivotTaskData,
+    TerminalPivotTaskset,
+)

@@ -1,8 +1,8 @@
-from learning_harness.harness import (
+from rl.harnesses.learning_harness.harness import (
     LearningHarnessHarness,
     LearningHarnessHarnessConfig,
 )
-from learning_harness.taskset import LearningHarnessConfig, LearningHarnessTaskset
+from rl.harnesses.learning_harness.taskset import LearningHarnessConfig, LearningHarnessTaskset
 
 
 def test_custom_harness_capabilities_are_explicit() -> None:
