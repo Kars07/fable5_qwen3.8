@@ -136,22 +136,24 @@ class TerminalPivotTaskset(Taskset[TerminalPivotTask, TerminalPivotConfig]):
                     continue
 
                 raw = json.loads(line_str)
-                task_name = raw.get("task_name", "")
+                row = json.loads(line_str)
+                task_name = row.get("task_name", "")
 
                 if self.config.task_filter and self.config.task_filter.lower() not in task_name.lower():
                     continue
 
+                prompt_messages = row.get("messages") or row.get("prompt") or []
+                reference = row.get("reference_completion") or row.get("expected_assistant_response") or ""
                 data = TerminalPivotTaskData(
                     idx=count,
-                    name=task_name,
-                    prompt=raw.get("messages", []),
-                    uuid=raw.get("uuid", ""),
+                    prompt=prompt_messages,
+                    uuid=row.get("uuid", ""),
                     task_name=task_name,
-                    trajectory_uid=raw.get("trajectory_uid", ""),
-                    turn_index=int(raw.get("turn_index", 0)),
-                    total_turns=int(raw.get("total_turns", 1)),
-                    expected_answer_raw=raw.get("expected_answer_raw", {}),
-                    reference_completion=raw.get("reference_completion", ""),
+                    trajectory_uid=row.get("trajectory_uid") or row.get("source_trajectory_uid") or "",
+                    turn_index=row.get("turn_index", 0),
+                    total_turns=row.get("total_turns", 1),
+                    expected_answer_raw=row.get("expected_answer_raw", {}),
+                    reference_completion=reference,
                 )
 
                 yield TerminalPivotTask(data=data, config=task_cfg)

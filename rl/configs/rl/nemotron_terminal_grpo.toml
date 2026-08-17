@@ -1,0 +1,46 @@
+max_steps = 20
+seq_len = 4096
+
+[model]
+name = "Qwen/Qwen3-0.6B"
+
+[orchestrator]
+batch_size = 4
+group_size = 4
+max_inflight_episodes = 4
+pre_batch_filters = []
+post_batch_filters = []
+
+[orchestrator.algo]
+type = "grpo"
+
+[orchestrator.train.sampling]
+temperature = 0.7
+max_completion_tokens = 512
+
+[[orchestrator.train.source]]
+name = "nemotron-terminal-train"
+
+[orchestrator.train.source.env.taskset]
+id = "rl_pivot_terminal"
+num_tasks = 500
+
+[orchestrator.train.source.env.agent]
+max_turns = 1
+
+[orchestrator.train.source.env.agent.harness]
+id = "null"
+
+[orchestrator.train.source.env.agent.runtime]
+type = "subprocess"
+
+[trainer.optim]
+lr = 5.0e-6
+
+[ckpt]
+interval = 5
+
+[inference]
+
+[orchestrator.renderer]
+name = "qwen3"
