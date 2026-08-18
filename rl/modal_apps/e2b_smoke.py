@@ -13,14 +13,14 @@ image = modal.Image.debian_slim(python_version="3.12").pip_install("e2b==2.35.0"
 def _local_e2b_key() -> str:
     key = os.environ.get("E2B_API_KEY")
     env_path = Path(__file__).resolve().parents[2] / ".env"
-    if not key:
-        for line in env_path.read_text().splitlines():
+    if not key and env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
             name, separator, value = line.partition("=")
-            if separator and name.strip() == "e2b_api":
+            if separator and name.strip() in ("e2b_api", "E2B_API_KEY"):
                 key = value.strip().strip("'\"")
                 break
     if not key:
-        raise RuntimeError(".env must define e2b_api or E2B_API_KEY must be set")
+        raise ValueError("E2B_API_KEY environment variable or .env file is required.")
     return key
 
 

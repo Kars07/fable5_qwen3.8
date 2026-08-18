@@ -71,7 +71,7 @@ async def test_terminal_pivot_reward_scoring() -> None:
         ],
     )
     score_perfect = await task.evaluate_decision(perfect_trace)
-    assert score_perfect == 1.0  # 0.2 format + 0.4 tool + 0.4 command match = 1.0
+    assert score_perfect == 1.0
 
     # 2. Response missing <think> tags
     no_think_trace = Trace(
@@ -87,7 +87,7 @@ async def test_terminal_pivot_reward_scoring() -> None:
         ],
     )
     score_no_think = await task.evaluate_decision(no_think_trace)
-    assert score_no_think == 0.8  # 0.4 tool + 0.4 command match = 0.8
+    assert score_no_think == pytest.approx(0.90)
 
     # 3. Completely unrelated response
     bad_trace = Trace(
@@ -102,3 +102,51 @@ async def test_terminal_pivot_reward_scoring() -> None:
     )
     score_bad = await task.evaluate_decision(bad_trace)
     assert score_bad == 0.0
+
+    # 4. Premature completion gaming attempt (claims task_complete: true without solving)
+    fake_submit_trace = Trace(
+        task=task_info,
+        agent=agent_info,
+        nodes=[
+            MessageNode(
+                id=0,
+                message=AssistantMessage(
+                    content='{"analysis": "done", "plan": "done", "commands": [], "task_complete": true}'
+                ),
+            )
+        ],
+    )
+    score_fake = await task.evaluate_decision(fake_submit_trace)
+    assert score_fake == -0.30  # 0.20 base - 0.50 penalty = -0.30 negative reward!
+
+    # 5. Reasoning bleed test (mentions target command in analysis, but executes different command)
+    bleed_trace = Trace(
+        task=task_info,
+        agent=agent_info,
+        nodes=[
+            MessageNode(
+                id=0,
+                message=AssistantMessage(
+                    content='{"analysis": "I should run ls -la /app to see files", "plan": "Check app directory", "commands": [{"keystrokes": "whoami\\n", "duration": 0.5}], "task_complete": false}'
+                ),
+            )
+        ],
+    )
+    score_bleed = await task.evaluate_decision(bleed_trace)
+    assert score_bleed == 0.20  # Only gets 0.20 structure, 0.0 command match because whoami != ls -la /app!
+
+    # 6. Canonical path normalization test (./app vs /app)
+    canon_trace = Trace(
+        task=task_info,
+        agent=agent_info,
+        nodes=[
+            MessageNode(
+                id=0,
+                message=AssistantMessage(
+                    content='{"analysis": "List files", "plan": "Execute ls", "commands": [{"keystrokes": "ls -la ./app\\n", "duration": 0.5}], "task_complete": false}'
+                ),
+            )
+        ],
+    )
+    score_canon = await task.evaluate_decision(canon_trace)
+    assert score_canon == 0.85  # 0.10 json reasoning + 0.10 json schema + 0.50 cmd match + 0.15 intermediate = 0.85

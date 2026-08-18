@@ -13,6 +13,8 @@ verifiers/
 *.safetensors
 *.bin
 *.jsonl
+*.gguf
+eval_trajectories/
 
 .venv/
 venv/

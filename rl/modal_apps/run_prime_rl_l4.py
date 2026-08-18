@@ -73,7 +73,7 @@ image = (
 
 @app.function(
     image=image,
-    gpu="A100-80GB:2",
+    gpu="L4:4",
     cpu=16,
     memory=65536,
     volumes={
@@ -86,7 +86,7 @@ image = (
     timeout=7200,
 )
 def run_rl(
-    config_path: str = "/opt/rl/configs/rl/nemotron_terminal_grpo.toml",
+    config_path: str = "/opt/rl/configs/rl/nemotron_terminal_grpo_l4.toml",
     config_content: str | None = None,
     hf_token: str | None = None,
     dry_run: bool = False,
@@ -193,7 +193,7 @@ def run_rl(
 
 @app.local_entrypoint()
 def main(
-    config: str = "rl/configs/rl/nemotron_terminal_grpo.toml",
+    config: str = "rl/configs/rl/nemotron_terminal_grpo_l4.toml",
     dry_run: bool = False,
     steps: int | None = None,
 ) -> None:
@@ -223,3 +223,4 @@ def main(
         dry_run=dry_run,
         steps=steps,
     )
+

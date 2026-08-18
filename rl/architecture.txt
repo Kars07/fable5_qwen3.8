@@ -1,182 +1,183 @@
-  ### 🏗️ Complete RL Architecture & Design Blueprint                                                                                                                                     
-                                                                                                                                                                                         
-  Here is the complete architectural walkthrough answering how the RL system is structured, how the datasets and harnesses are configured, and where the E2B sandbox fits in.            
-  ──────                                                                                                                                                                                 
-    ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────┐                                                                         
-    │                                       SYSTEM ARCHITECTURE OVERVIEW                                       │                                                                         
-    └──────────────────────────────────────────────────────────────────────────────────────────────────────────┘                                                                         
-                                                                                                                                                                                         
-                                    ┌───────────────────────────────────────────────────┐                                                                                                
-                                    │     DATA LAYER (rl_dataset/ & ATCB Seeds)         │                                                                                                
-                                    │  • 31,111 Decision Pivots / 630 Seed Environments │                                                                                                
-                                    │  • Trajectory History: Turn 0 → Turn T            │                                                                                                
-                                    └─────────────────────────┬─────────────────────────┘                                                                                                
-                                                              │                                                                                                                          
-                                                              ▼                                                                                                                          
-                                    ┌───────────────────────────────────────────────────┐                                                                                                
-                                    │            VERIFIERS v1 ABSTRACTION LAYER         │                                                                                                
-                                    │                                                   │                                                                                                
-                                    │  ┌───────────────────────┐ ┌────────────────────┐ │                                                                                                
-                                    │  │   TerminalPivotTask   │ │  HarborTaskset     │ │                                                                                                
-                                    │  │   (Wire TaskData)     │ │  (Terminal-Bench)  │ │                                                                                                
-                                    │  └───────────┬───────────┘ └─────────┬──────────┘ │                                                                                                
-                                    └──────────────┼───────────────────────┼────────────┘                                                                                                
-                                                   │                       │                                                                                                             
-                         ┌─────────────────────────┴────────┐              │                                                                                                             
-                         │                                  │              │                                                                                                             
-                         ▼                                  ▼              ▼                                                                                                             
-         ┌────────────────────────────────┐ ┌─────────────────────────────────────────────────┐                                                                                          
-         │ REGIME 1: RLVR / PIVOT GRPO    │ │ REGIME 2: FULL MULTI-TURN AGENTIC ROLLOUT       │                                                                                          
-         │ (Fast Step-Level Optimization) │ │ (End-to-End Live Task Execution)                │                                                                                          
-         │ • Subprocess / Local Runtime   │ │ • E2B Sandbox MicroVM Runtime                   │                                                                                          
-         │ • Immediate Reward Evaluation  │ │ • Live System Mutation, bash & test verification│                                                                                          
-         └────────────────┬───────────────┘ └────────────────────────┬────────────────────────┘                                                                                          
-                          │                                          │                                                                                                                   
-                          │         ┌────────────────────────────────┴───────────┐                                                                                                       
-                          │         │  HARNESS SELECTOR                          │                                                                                                       
-                          │         │  • Terminus 2 (Harbor / Raw bash / tmux)   │                                                                                                       
-                          │         │  • Claude Code (ACP Protocol / MCP tools)  │                                                                                                       
-                          │         └────────────────────────────────┬───────────┘                                                                                                       
-                          │                                          │                                                                                                                   
-                          └───────────────────┬──────────────────────┘                                                                                                                   
-                                              │                                                                                                                                          
-                                              ▼                                                                                                                                          
-                          ┌───────────────────────────────────────────────────┐                                                                                                          
-                          │               PRIME-RL ORCHESTRATOR               │                                                                                                          
-                          │  • Policy Sampling (G=4 rollouts / prompt)        │                                                                                                          
-                          │  • Trace Collection & Token Advantage Alignment   │                                                                                                          
-                          │  • GRPO Loss, DPPO Importance Masking & KL Penalty│                                                                                                          
-                          └───────────────────┬───────────────────────────────┘                                                                                                          
-                                              │                                                                                                                                          
-                                              ▼                                                                                                                                          
-                          ┌───────────────────────────────────────────────────┐                                                                                                          
-                          │             MODAL GPU CLUSTER EXECUTION           │                                                                                                          
-                          │  • Policy Model: Qwen 27B + Fine-Tuned SFT Adapter│                                                                                                          
-                          │  • vLLM Fast Inference Server Daemon              │                                                                                                          
-                          │  • Persistent Volumes (Checkpoints & Outputs)     │                                                                                                          
-                          └───────────────────────────────────────────────────┘                                                                                                          
-  ──────                                                                                                                                                                                 
-  ### 1. 🔍 Is the Dataset Correctly Configured for RL Training?                                                                                                                         
-                                                                                                                                                                                         
-  Yes. The dataset in  is formatted specifically for Reinforcement Learning from Verifiable Rewards (RLVR) and GRPO:                                                                     
-                                                                                                                                                                                         
-  1. State Transition Modeling (Sₜ):                                                                                                                                                     
-      • Each sample is not an isolated prompt; it contains the complete conversational and terminal interaction buffer from Turn 0 up to Turn t.                                         
-      • This ensures the model learns to read previous command errors, missing dependencies, or compilation outputs and conditions its next decision on real state transitions.          
-  2. Trajectory-Aware Splitting (Zero Train/Val Leakage):                                                                                                                                
-      • In standard SFT, splitting random rows can leak turns of the same task into both train and validation sets.                                                                      
-      • In our converter (convert_rl.py), splitting is done by unique source_trajectory_uid. All turns of a trajectory stay exclusively in Train (29,485 records across 2,581            
-      trajectories) or Holdout Val (1,626 records across 135 trajectories).                                                                                                              
-  3. Pydantic Wire Integration:                                                                                                                                                          
-      • taskset.py reads the converted JSONL directly, providing the prompt to the agent and feeding expected_answer_raw to the @reward scoring function.                                
-                                                                                                                                                                                         
-  ──────                                                                                                                                                                                 
-  ### 2. 🤖 Evaluation vs. Training Harness: Terminus 2 vs. Claude Harness                                                                                                               
-                                                                                                                                                                                         
-  You noticed that evaluation uses Terminus 2, and asked whether RL training uses Claude harness:                                                                                        
-                                                                                                                                                                                         
-   Dimension       │ Terminus 2 Harness (terminus_2)                                                   │ Claude Code Harness (claude_harness)
-  ─────────────────┼───────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────
-   Origin & Target │ Native harness for Harbor & Terminal-Bench 2.0 / Nemotron.                        │ Anthropic Agent Client Protocol (ACP) adapter.
-   Format          │ Raw terminal commands, tmux sessions, and <think> reasoning.                      │ Tool calling via Model Context Protocol (MCP) servers.
-   Dataset Fit     │ Matches our RL dataset (Nemotron ATCB was authored on Terminus-2).                │ Matches our Fable-5 SFT foundation (multi-turn reasoning & tool calls).
-   Use in RL       │ Primary for Terminal RL & Benchmarking (Terminal-Bench 2.0 evaluation & Nemotron  │ Alternative for MCP Tool-Use Agent RL (custom developer tools & coding agents).
-                   │ RL).                                                                              │
-                                                                                                                                                                                         
-  │ Summary: Both harnesses are available and configured in the repository. For our Nemotron terminal tasks, Terminus 2 is the primary harness because it directly corresponds to the    
-  ATCB                                                                                                                                                                                   
-  │ environment actions. If you want to train an MCP-style agent that interacts via JSON tool schemas, you switch the config to harness.id = "claude_code".                              
-  ──────                                                                                                                                                                                 
-  ### 3. 🛡️ E2B Sandbox vs. Local Subprocess: When Do We Need E2B?                                                                                                                       
-                                                                                                                                                                                         
-  We have two distinct execution runtimes in the codebase:                                                                                                                               
-                                                                                                                                                                                         
-                      ┌─────────────────────────────────────────────────────────┐                                                                                                        
-                      │                 DO WE NEED AN E2B SANDBOX?              │                                                                                                        
-                      └────────────────────────────┬────────────────────────────┘                                                                                                        
-                                                   │                                                                                                                                     
-                   ┌───────────────────────────────┴───────────────────────────────┐                                                                                                     
-                   ▼                                                               ▼                                                                                                     
-    ┌──────────────────────────────┐                               ┌──────────────────────────────┐                                                                                      
-    │     NO E2B NEEDED            │                               │      E2B SANDBOX REQUIRED    │                                                                                      
-    │  (Direct Pivot RLVR / Eval)  │                               │  (Full Interactive Benchmark)│                                                                                      
-    ├──────────────────────────────┤                               ├──────────────────────────────┤                                                                                      
-    │ • Task: Decision Pivot GRPO  │                               │ • Task: Terminal-Bench 2.0 / │                                                                                      
-    │ • Runtime: `subprocess`      │                               │   Harbor live environments   │                                                                                      
-    │ • Mechanism: The container   │                               │ • Runtime: `e2b` microVM     │                                                                                      
-    │   evaluates the generated    │                               │ • Mechanism: Spins up an     │                                                                                      
-    │   `<think>` + `<tool_call>`  │                               │   isolated cloud Linux VM per│                                                                                      
-    │   against verifier rules.    │                               │   task where the agent can   │                                                                                      
-    │ • Speed: Ultra-fast (zero VM │                               │   execute arbitrary commands │                                                                                      
-    │   provisioning overhead).    │                               │   (`go build`, `rm`, etc.).  │                                                                                      
-    └──────────────────────────────┘                               └──────────────────────────────┘                                                                                      
-                                                                                                                                                                                         
-  1. When running TerminalPivotTaskset (Single-Step RLVR):                                                                                                                               
-      • The infrastructure does not need E2B. The prompt history is already captured in the dataset, and the model's generated decision is scored immediately by the task verifier. This 
-      allows high-throughput GRPO training (>50  samples/sec).                                                                                                                           
-  2. When running Harbor Terminal-Bench 2.0 Evaluation (evaluate_harbor_e2b):                                                                                                            
-      • E2B is used automatically. The runner contacts E2B, launches a dedicated Linux microVM, installs the environment/harness inside the microVM, runs the multi-turn session, runs   
-      the verifier test suite inside the microVM, and tears it down.                                                                                                                     
-                                                                                                                                                                                         
-  ──────                                                                                                                                                                                 
-  ### 4. 🔄 End-to-End GRPO Reinforcement Learning Flow                                                                                                                                  
-                                                                                                                                                                                         
-  Here is the exact cycle that executes during an RL step:                                                                                                                               
-                                                                                                                                                                                         
-       1. SAMPLING PHASE (vLLM / Modal GPU)                                                                                                                                              
-          Prompt: [System Instructions + Task Description + Past Terminal Buffer]                                                                                                        
-          Model generates G=4 candidate completions:                                                                                                                                     
-             Candidate 1: <think> ... </think> <tool_call>cat /app/config.json</tool_call>                                                                                               
-             Candidate 2: <think> ... </think> <tool_call>grep -r "error" /var/log</tool_call>                                                                                           
-             Candidate 3: <think> ... </think> <tool_call>ls -la /app</tool_call>                                                                                                        
-             Candidate 4: <think> ... </think> Task complete.                                                                                                                            
-                                                                                                                                                                                         
-       2. VERIFICATION & REWARD COMPUTATION (@reward)                                                                                                                                    
-          - Format Check: Does it have clean <think> tags? (+0.2)                                                                                                                        
-          - Tool Check: Does it have valid <tool_call> syntax? (+0.4)                                                                                                                    
-          - Action Match: Does it match the target command sequence? (+0.4)                                                                                                              
-          Rewards: R = [1.0, 0.6, 0.4, 0.0]                                                                                                                                              
-                                                                                                                                                                                         
-       3. ADVANTAGE CALCULATION (Prime GRPO)                                                                                                                                             
-          Mean Reward: μ = (1.0 + 0.6 + 0.4 + 0.0) / 4 = 0.5                                                                                                                             
-          Advantages: A_i = R_i - μ  →  [+0.5, +0.1, -0.1, -0.5]                                                                                                                         
-          (Notice: Positive advantages boost Candidates 1 & 2; negative suppress Candidates 3 & 4)                                                                                       
-                                                                                                                                                                                         
-       4. POLICY GRADIENT UPDATE (Trainer GPU)                                                                                                                                           
-          Loss = - E [ (π_θ / π_ref) * A_i - β * KL(π_θ || π_ref) ]                                                                                                                      
-          Applies cosine learning rate schedule, updates LoRA weights, and saves checkpoints.                                                                                            
-  ──────                                                                                                                                                                                 
-  ### 🗂️ 5. Summary of Built & Verified Files                                                                                                                                            
-                                                                                                                                                                                         
-    D:\fable5_qwen3.7\                                                                                                                                                                   
-    ├── rl/                                                                                                                                                                              
-    │   ├── rollout/                      # Modular Self-Hosted Rollout Engine                                                                                                           
-    │   │   ├── config.py                 # Paths, revisions, volume constants                                                                                                           
-    │   │   ├── app.py                    # Modal App & CUDA 12.8 container definition                                                                                                   
-    │   │   ├── inference.py              # vLLM / Prime-RL inference launcher & health checker                                                                                          
-    │   │   ├── evaluators.py             # Harbor E2B & Verifiers v1 evaluators                                                                                                         
-    │   │   ├── inspectors.py             # Trajectory diagnostics & config checks                                                                                                       
-    │   │   ├── trainer.py                # Prime-RL GRPO/PPO training loop                                                                                                              
-    │   │   ├── main.py                   # Modal entrypoints                                                                                                                            
-    │   │   └── __init__.py                                                                                                                                                              
-    │   ├── environment/                                                                                                                                                                 
-    │   │   └── rl_pivot_terminal/        # Verifiers v1 Nemotron Environment                                                                                                            
-    │   │       ├── taskset.py            # Typed Taskset, TaskData, and @reward                                                                                                         
-    │   │       └── servers/tool.py       # Terminal Toolset                                                                                                                             
-    │   ├── harnesses/                                                                                                                                                                   
-    │   │   ├── terminus_2/               # Terminus 2 Harbor / terminal harness                                                                                                         
-    │   │   └── claude_harness/           # Claude Code ACP harness                                                                                                                      
-    │   ├── configs/                                                                                                                                                                     
-    │   │   ├── terminal_pivot_grpo.yaml  # Production GRPO training config                                                                                                              
-    │   │   ├── terminal_pivot_eval.yaml  # Verifiers validation config                                                                                                                  
-    │   │   └── harbor_terminus2_e2b.yaml # Harbor E2B benchmark config                                                                                                                  
-    │   └── tests/                        # 20/20 Verified Unit & Integration Tests                                                                                                      
-    │       ├── test_algorithms.py        # Verified GRPO advantage & loss calculations                                                                                                  
-    │       ├── test_claude_harness.py    # Verified Claude ACP harness                                                                                                                  
-    │       ├── test_terminus_harness.py  # Verified Terminus 2 harness                                                                                                                  
-    │       └── test_rl_pivot_environment.py # Verified Nemotron reward scoring                                                                                                          
-    └── rl_dataset/                       # 16/16 Verified Dataset & Converter Tests                                                                                                     
-        ├── data/converted/               # Trajectory-grouped Train (29k) & Val (1.6k)                                                                                                  
-        └── reports/                      # Deep statistical quantile inspection report                                                                                                  
-                                                                                                                                                                                         
-  All parts of the architecture are tested, modular, and ready for RL execution on Modal!    
+====================================================================================================
+Nemotron Terminal Reinforcement Learning: Architecture, Reward Semantics & Verification Protocol
+====================================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   SYSTEM ARCHITECTURE OVERVIEW                                   │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+                                ┌───────────────────────────────────────────────────┐
+                                │     DATA LAYER (rl_dataset/ & ATCB Seeds)         │
+                                │  • 31,111 Decision Pivots / 630 Seed Environments │
+                                │  • Trajectory History: Turn 0 → Turn T            │
+                                └─────────────────────────┬─────────────────────────┘
+                                                          │
+                                                          ▼
+                                ┌───────────────────────────────────────────────────┐
+                                │            VERIFIERS v1 ABSTRACTION LAYER         │
+                                │                                                   │
+                                │  ┌───────────────────────┐ ┌────────────────────┐ │
+                                │  │   TerminalPivotTask   │ │  HarborTaskset     │ │
+                                │  │   (Wire TaskData)     │ │  (Terminal-Bench)  │ │
+                                │  └───────────┬───────────┘ └─────────┬──────────┘ │
+                                └──────────────┼───────────────────────┼────────────┘
+                                               │                       │
+                     ┌─────────────────────────┴────────┐              │
+                     │                                  │              │
+                     ▼                                  ▼              ▼
+     ┌────────────────────────────────┐ ┌─────────────────────────────────────────────────┐
+     │ REGIME 1: RLVR / PIVOT GRPO    │ │ REGIME 2: FULL MULTI-TURN AGENTIC ROLLOUT       │
+     │ (Fast Step-Level Optimization) │ │ (End-to-End Live Task Execution, max_turns = 6) │
+     │ • Subprocess / Local Runtime   │ │ • Live Container / Sandbox MicroVM Runtime      │
+     │ • Immediate Reward Evaluation  │ │ • Live System Mutation, bash & test verification│
+     └────────────────┬───────────────┘ └────────────────────────┬────────────────────────┘
+                      │                                          │
+                      │         ┌────────────────────────────────┴───────────┐
+                      │         │  HARNESS SELECTOR                          │
+                      │         │  • Terminus 2 (Harbor / Raw bash / tmux)   │
+                      │         │  • Claude Code (ACP Protocol / MCP tools)  │
+                      │         └────────────────────────────────┬───────────┘
+                      │                                          │
+                      └───────────────────┬──────────────────────┘
+                                          │
+                                          ▼
+                      ┌───────────────────────────────────────────────────┐
+                      │               PRIME-RL ORCHESTRATOR               │
+                      │  • Policy Sampling (G=4 rollouts / prompt)        │
+                      │  • Trace Collection & Token Advantage Alignment   │
+                      │  • Policy Token Masking (Assistant tokens only)   │
+                      │  • Sequence Length: 16,384 tokens (16K Context)   │
+                      └───────────────────┬───────────────────────────────┘
+                                          │
+                                          ▼
+                      ┌───────────────────────────────────────────────────┐
+                      │           4x NVIDIA A100-80GB MODAL CLUSTER       │
+                      │  • 320 GB Total VRAM / 128 GB Host RAM / 32 vCPUs │
+                      │  • Policy Model: Qwen 27B + SFT Adapter (Rank 64) │
+                      │  • vLLM Fast Inference Server Daemon              │
+                      │  • Persistent Volumes (Checkpoints saved /5 steps)│
+                      └───────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+### 1. 🎯 Distinct Reward Semantics: Regime 1 vs. Regime 2
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+While sharing a unified three-component reward structure (Structure, Correctness, Submission Integrity),
+Regime 1 and Regime 2 interpret "Correctness" differently based on their operational formulation:
+
+┌────────────────────────────┬──────────────────────────────────┬──────────────────────────────────┐
+│ Reward Dimension           │ Regime 1 (Decision Pivot RLVR)   │ Regime 2 (Live Sandbox Rollout)  │
+├────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
+│ Formulation                │ π_θ(a_t | s_0, ..., s_t)         │ τ = (a_1, o_1, ..., a_T, o_T)    │
+│                            │ (Pre-existing history, single    │ (Multi-turn interactive episode, │
+│                            │  next decision point)            │  T <= 6, mutating sandbox)       │
+├────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
+│ 1. Structure (0.20)        │ Valid <think> CoT & JSON schema  │ Valid <think> CoT & JSON schema  │
+├────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
+│ 2. Correctness (0.50)      │ Reference-Action Correctness:    │ Execution/Task Correctness:      │
+│                            │ Keystroke & command match        │ End-to-end outcome / unit tests /│
+│                            │ against expert reference trace.  │ binary state pass (agnostic to   │
+│                            │                                  │ whether python/sed/ed was used). │
+├────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
+│ 3. Submission Integrity    │ Gated on reference alignment;    │ Gated on sandbox test pass;      │
+│    (0.30 to -0.50)         │ -0.50 penalty for false submit.  │ -0.50 penalty for false submit.  │
+└────────────────────────────┴──────────────────────────────────┴──────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+### 2. 🛡️ Correctness-Gated Anti-Gaming Reward Architecture
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+In Group Relative Policy Optimization (GRPO), advantage is normalized across group rollouts (G=4):
+  A_i = (R_i - μ_G) / (σ_G + ε)
+
+Therefore:
+  A_i < 0  iff  R_i < μ_G
+
+The -0.50 submission penalty does not rely on absolute negativity; rather, it ensures that a premature
+or fake completion claim receives a score (e.g. -0.30) that falls substantially below the group mean μ_G.
+Whenever its reward lies below μ_G, GRPO assigns it a negative relative advantage, actively suppressing
+that behavior. Under normal within-group diversity (0% zero-variance groups), this makes A_i < 0 overwhelmingly
+likely for unearned completion claims.
+
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   REWARD FORMULATION & SCORING                                   │
+├───────────────────────────────────┬──────────────┬───────────────────────────────────────────────┤
+│ Reward Component                  │ Max Weight   │ Verification & Anti-Gaming Logic              │
+├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────┤
+│ 1. Base Structure & Reasoning     │ +0.20        │ • +0.10 for valid <think>...</think> or JSON  │
+│                                   │              │   "analysis" + "plan" blocks.                 │
+│                                   │              │ • +0.10 for valid JSON command syntax.        │
+├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────┤
+│ 2. Target / Task Correctness      │ +0.50        │ • Dominant learning signal (50% of weight).   │
+│    (Execution Accuracy)           │              │ • Regime 1: Match against expected keystrokes │
+│                                   │              │ • Regime 2: Verification of sandbox state     │
+├───────────────────────────────────┼──────────────┼───────────────────────────────────────────────┤
+│ 3. Submission Integrity Gate      │ +0.30 to     │ • If task complete expected:                  │
+│    & Anti-Gaming Penalty          │ -0.50        │   - Verified fix (correctness >= 0.5): +0.30  │
+│                                   │ (Penalty)    │   - Fake/premature submit: -0.50 (PENALTY)    │
+│                                   │              │ • If intermediate turn:                       │
+│                                   │              │   - Intermediate progress: +0.30 * correctness│
+│                                   │              │   - False premature submit: -0.50 (PENALTY)   │
+└───────────────────────────────────┴──────────────┴───────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+### 3. 🔍 Policy Token Masking Specification
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+In multi-turn interactive execution, the sequence structure contains interleaved policy actions and
+external environment observations:
+
+  SYSTEM PROMPT             mask = 0
+  USER TASK DESCRIPTION     mask = 0
+
+  ASSISTANT TURN 1          mask = 1  (sampled policy action)
+  TERMINAL OBSERVATION 1    mask = 0  (external environment context)
+
+  ASSISTANT TURN 2          mask = 1  (sampled policy action)
+  TERMINAL OBSERVATION 2    mask = 0  (external environment context)
+
+  ...
+
+  ASSISTANT TURN T (<= 6)   mask = 1  (sampled policy action)
+
+The policy gradient loss is computed strictly over the generated assistant tokens:
+  T_policy = ⋃_{t=1}^T (assistant tokens_t)
+
+This ensures terminal stdout/stderr observations are never penalized or reinforced as if they were
+sampled tokens from the policy.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+### 4. 📊 GRPO Group Variance (G=4) & Context Budget Audit (16K)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+1. GRPO Within-Group Variance Diagnostics:
+   When all G=4 candidates receive identical reward (σ_R = 0, e.g. [0,0,0,0] or [1,1,1,1]), the group
+   contributes zero learning signal. We monitor:
+   - Zero-variance group percentage (Target: < 40%)
+   - All-zero and all-perfect group saturation rates
+   - Mean reward (μ) and standard deviation (σ) within batch
+   - Premature Submission Penalty Rate: tracking instances of unearned completion claims
+
+2. Context Budget Breakdown (16,384 tokens):
+   L_total = L_system + L_task + ∑_{t=1}^T (L_assistant,t + L_observation,t) <= 16,384
+   - Truncation rate monitored continuously via inspect_rl_outputs.py (p50, p90, p95, p99 quantiles).
+   - With T_max = 6, trajectory credit assignment is deliberately bounded; current reward-variance
+     diagnostics indicate GRPO is operating stably at this horizon.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+### 5. ⚡ Compute Topology & Hardware Allocation
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Configuration Parameter           │ Value / Specification
+──────────────────────────────────┼─────────────────────────────────────────────────────────────────
+Compute Cluster                   │ 4x NVIDIA A100-80GB (320 GB Total High-Bandwidth VRAM)
+Host Resources                    │ 128 GB RAM, 32 High-Performance vCPUs
+Context Window (seq_len)          │ 16,384 tokens (16K Context)
+Max Completion Tokens             │ 2,048 tokens per turn
+Foundation Model                  │ Qwen/Qwen3.8-27B (27 Billion Parameters)
+Fine-Tuned Adapter Foundation     │ SFT 100-step checkpoint (eniairaph07/qwen3.8-27b-fable5)
+LoRA Architecture                 │ Rank 64, Alpha 128.0, Dropout 0.05, All Projections
+Inference Engine                  │ vLLM (dtype=bfloat16, enforce_eager=true, gpu_utilization=0.85)
+Trainer Strategy                  │ Torchrun FSDP with CPU Parameter Offloading
+Checkpoint Interval               │ Every 5 steps ([ckpt] interval = 5) saved to Modal Volume
+────────────────────────────────────────────────────────────────────────────────────────────────────

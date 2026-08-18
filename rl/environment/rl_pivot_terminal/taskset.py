@@ -1,44 +1,51 @@
-"""Verifiers v1 Taskset for Nemotron / ATCB Terminal Pivot Reinforcement Learning."""
+"""Verifiers v1 Taskset for Nemotron Terminal Pivot RL with Dense Reward Shaping."""
 
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from verifiers.v1.configs.task import TaskConfig
 from verifiers.v1.configs.taskset import TasksetConfig
 from verifiers.v1.task import Task, TaskData
 from verifiers.v1.taskset import Taskset
 from verifiers.v1.trace import Trace
-from verifiers.v1.types import Messages
 from verifiers.v1.utils.decorators import reward
 
 
 class TerminalPivotTaskData(TaskData):
-    """TaskData wire model for a terminal decision pivot."""
+    """Immutable data row representing an ATCB terminal state transition pivot."""
 
-    uuid: str = ""
-    task_name: str = ""
-    trajectory_uid: str = ""
-    turn_index: int = 0
-    total_turns: int = 1
-    expected_answer_raw: Dict[str, Any] = Field(default_factory=dict)
-    reference_completion: str = ""
+    model_config = ConfigDict(frozen=True)
+
+    uuid: str = Field(default="", description="Unique UUID for this decision turn")
+    task_name: str = Field(default="", description="Benchmark task / issue identifier")
+    trajectory_uid: str = Field(default="", description="Source trajectory UID")
+    turn_index: int = Field(default=0, description="0-indexed turn position in trajectory")
+    total_turns: int = Field(default=1, description="Total turns in source trajectory")
+    domain: str = Field(default="terminal", description="Task classification category")
+    expected_answer_raw: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parsed ground-truth expected answer containing analysis, plan, and keystrokes",
+    )
+    reference_completion: str = Field(
+        default="", description="Canonical assistant completion containing <think> and <tool_call>"
+    )
 
 
 class TerminalPivotTaskConfig(TaskConfig):
     """Configuration for individual terminal pivot tasks."""
 
-    reward_think_format: bool = True
-    reward_tool_format: bool = True
-    reward_command_match: bool = True
+    dense_rewards: bool = True
 
 
 class TerminalPivotTask(Task[TerminalPivotTaskData, TerminalPivotTaskConfig]):
-    """Behavior and scoring implementation for a terminal decision pivot."""
+    """Terminal decision step evaluation task with dense verifiable reward shaping."""
 
     @reward
     async def evaluate_decision(self, trace: Trace) -> float:
@@ -55,106 +62,250 @@ class TerminalPivotTask(Task[TerminalPivotTaskData, TerminalPivotTaskConfig]):
             last_call = trace.calls[-1]
             response_text = str(getattr(last_call, "response", "") or "")
 
-        if not response_text:
-            return 0.0
-
         score = 0.0
 
-        # 1. Format Reward: Check for <think> and </think> tags
-        if self.config.reward_think_format:
-            if "<think>" in response_text and "</think>" in response_text:
-                score += 0.2
+        # 1. Base Structure & Reasoning (0.20 max)
+        has_think = ("<think>" in response_text and "</think>" in response_text)
+        has_json_reasoning = ('"analysis"' in response_text and '"plan"' in response_text)
+        if has_think or has_json_reasoning:
+            score += 0.10
+        elif "<think>" in response_text or '"analysis"' in response_text:
+            score += 0.05
 
-        # 2. Action Reward: Check for valid tool call or task complete
+        has_json_schema = '"commands"' in response_text and '"task_complete"' in response_text
+        has_tool_call = "<tool_call>" in response_text or "<command>" in response_text
+        if has_json_schema or has_tool_call:
+            score += 0.10
+        elif any(kw in response_text for kw in ["```json", "```bash", "keystrokes"]):
+            score += 0.05
+
+        # Extract ONLY actual generated commands (no vocabulary bleed from analysis/plan)
+        gen_cmds = []
+        clean_str = response_text.strip()
+        if "```json" in clean_str:
+            clean_str = clean_str.split("```json", 1)[1].split("```", 1)[0].strip()
+        elif "```" in clean_str:
+            clean_str = clean_str.split("```", 1)[1].split("```", 1)[0].strip()
+
+        parsed_json = None
+        try:
+            parsed_json = json.loads(clean_str)
+        except Exception:
+            m = re.search(r"(\{.*\})", response_text, re.DOTALL)
+            if m:
+                try:
+                    parsed_json = json.loads(m.group(1))
+                except Exception:
+                    pass
+
+        if parsed_json and isinstance(parsed_json, dict):
+            raw_cmds = parsed_json.get("commands", [])
+            if isinstance(raw_cmds, list):
+                for c in raw_cmds:
+                    if isinstance(c, dict) and "keystrokes" in c:
+                        gen_cmds.append(str(c.get("keystrokes", "")).strip())
+                    elif isinstance(c, str):
+                        gen_cmds.append(c.strip())
+
+        if not gen_cmds:
+            tool_matches = re.findall(r"<(?:tool_call|command)>(.*?)</(?:tool_call|command)>", response_text, re.DOTALL)
+            for tm in tool_matches:
+                gen_cmds.append(tm.strip())
+
+        def canonical_tokens(cmd_str: str) -> set[str]:
+            tokens = set()
+            for tok in re.findall(r"[\w\.\/-]+", cmd_str):
+                clean_tok = tok.strip("'\"")
+                if clean_tok.startswith("./"):
+                    clean_tok = clean_tok[2:]
+                clean_tok = clean_tok.rstrip("/")
+                if clean_tok:
+                    tokens.add(clean_tok)
+                    if "/" in clean_tok:
+                        tokens.add(clean_tok.split("/")[-1])
+            return tokens
+
+        all_gen_tokens: set[str] = set()
+        gen_binaries: set[str] = set()
+        for gc in gen_cmds:
+            all_gen_tokens.update(canonical_tokens(gc))
+            parts = gc.split()
+            if parts:
+                base_b = parts[0].strip("'\"")
+                if base_b.startswith("./"):
+                    base_b = base_b[2:]
+                gen_binaries.add(base_b)
+
+        # 2. Ground-Truth Command Correctness (0.50 max — Continuous Command-Token Similarity)
         expected_raw = self.data.expected_answer_raw
         expected_complete = expected_raw.get("task_complete", False)
         expected_cmds = expected_raw.get("commands", [])
 
-        if expected_complete and not expected_cmds:
-            # Expected task complete
-            if "Task complete" in response_text or "task_complete" in response_text:
-                score += 0.8
-        elif expected_cmds:
-            # Expected bash commands
-            if "<tool_call>" in response_text or "bash" in response_text:
-                score += 0.4
-
-            # Check if any expected command keywords appear in the agent's action
-            matched_cmds = 0
+        cmd_correctness = 0.0
+        if expected_cmds:
+            total_cmd_score = 0.0
             for cmd in expected_cmds:
                 ks = cmd.get("keystrokes", "").strip()
-                if ks and ks in response_text:
-                    matched_cmds += 1
+                if not ks:
+                    continue
+                exp_tokens = canonical_tokens(ks)
+                if not exp_tokens:
+                    continue
 
-            if matched_cmds > 0:
-                score += 0.4 * (matched_cmds / len(expected_cmds))
+                # Exact command string match against parsed generated commands
+                if any(ks == gc or ks.strip() == gc.strip() for gc in gen_cmds):
+                    total_cmd_score += 1.0
+                    continue
 
-        return min(1.0, score)
+                # Token & argument overlap strictly on generated commands
+                overlap = exp_tokens.intersection(all_gen_tokens)
+                overlap_ratio = len(overlap) / max(1, len(exp_tokens))
+
+                # Binary / Tool match check
+                base_cmd = ks.split()[0] if ks.split() else ""
+                if base_cmd.startswith("./"):
+                    base_cmd = base_cmd[2:]
+                has_base = base_cmd in gen_binaries
+
+                cmd_score = (0.25 if has_base else 0.0) + 0.75 * overlap_ratio
+                total_cmd_score += min(1.0, cmd_score)
+
+            cmd_correctness = min(1.0, (total_cmd_score / max(1, len(expected_cmds))))
+            score += 0.50 * cmd_correctness
+
+        # 3. Submission Integrity & Completion Gate (0.30 max)
+        # Prevents fake edit + premature submission gaming:
+        # False / unearned completion claims receive an active NEGATIVE PENALTY (-0.50).
+        model_claims_complete = ('"task_complete": true' in response_text or '"task_complete":true' in response_text)
+
+        if expected_complete:
+            # Task SHOULD be completed at this step
+            if model_claims_complete:
+                if not expected_cmds or cmd_correctness >= 0.5:
+                    score += 0.30
+                else:
+                    # Premature claim without proper fix -> Heavy negative penalty
+                    score -= 0.50
+            elif any(term in response_text.lower() for term in ["complete", "finished", "done", "submitted"]):
+                score += 0.15
+        else:
+            # Task is NOT yet complete (intermediate step)
+            if not model_claims_complete:
+                # Continuous credit based on exact intermediate action precision
+                score += 0.30 * cmd_correctness
+            else:
+                # False premature completion submission -> Heavy negative penalty (-0.50)
+                score -= 0.50
+
+        return max(-1.0, min(1.0, score))
+
+
+def prune_prompt_messages(messages: list[dict[str, Any]], max_chars: int = 42000) -> list[dict[str, Any]]:
+    """Ensure multi-turn prompt messages fit strictly within pre-rollout budget (<=14K tokens)."""
+    if not messages or not isinstance(messages, list):
+        return messages
+
+    total_chars = sum(len(str(m.get("content", ""))) for m in messages if isinstance(m, dict))
+    if total_chars <= max_chars:
+        return messages
+
+    kept_first = messages[0:1]
+    remainder = messages[1:]
+
+    pruned_remainder: list[dict[str, Any]] = []
+    accumulated_chars = sum(len(str(m.get("content", ""))) for m in kept_first if isinstance(m, dict))
+
+    for msg in reversed(remainder):
+        if not isinstance(msg, dict):
+            continue
+        c = str(msg.get("content", ""))
+        if len(c) > 8000:
+            head = c[:2500]
+            tail = c[-2500:]
+            c = f"{head}\n\n[... historical terminal output truncated for context budget ...]\n\n{tail}"
+            msg = {**msg, "content": c}
+
+        if accumulated_chars + len(c) <= max_chars or not pruned_remainder:
+            pruned_remainder.insert(0, msg)
+            accumulated_chars += len(c)
+        else:
+            break
+
+    return kept_first + pruned_remainder
 
 
 class TerminalPivotConfig(TasksetConfig):
-    """Configuration for loading Nemotron Terminal Pivot tasksets."""
+    """Configuration for Nemotron Terminal Pivot taskset loader."""
 
-    dataset_path: Path = Field(
-        default=Path("rl_dataset/data/converted/nemotron_terminal_rl_train.jsonl"),
-        description="Path to converted JSONL dataset file",
-    )
-    val_dataset_path: Path = Field(
-        default=Path("rl_dataset/data/converted/nemotron_terminal_rl_val.jsonl"),
-        description="Path to holdout validation JSONL dataset file",
-    )
-    split: str = Field("train", description="Split to load: 'train' or 'val'")
-    num_tasks: Optional[int] = Field(None, description="Maximum number of tasks to load")
-    task_filter: Optional[str] = Field(None, description="Substring filter for task names")
+    id: str = "rl_pivot_terminal"
+    split: str = "train"
+    num_tasks: int | None = None
+    start: int = 0
+    task_name_filter: str | None = None
+    dataset_path: str | None = None
 
 
 class TerminalPivotTaskset(Taskset[TerminalPivotTask, TerminalPivotConfig]):
-    """Taskset loader yielding TerminalPivotTask instances for Verifiers v1 / Prime-RL."""
+    """Taskset loader streaming ATCB terminal decision pivots."""
 
     def load(self) -> Iterable[TerminalPivotTask]:
-        """Construct and yield typed tasks from JSONL dataset."""
-        file_path = self.config.dataset_path if self.config.split == "train" else self.config.val_dataset_path
+        """Load converted dataset JSONL and yield typed tasks."""
+        if self.config.dataset_path:
+            file_path = Path(self.config.dataset_path)
+        else:
+            filename = (
+                "nemotron_terminal_rl_train.jsonl"
+                if self.config.split == "train"
+                else "nemotron_terminal_rl_val.jsonl"
+            )
+            candidates = [
+                Path("rl_dataset/data/converted") / filename,
+                Path("/opt/rl_dataset/data/converted") / filename,
+                Path("../rl_dataset/data/converted") / filename,
+                Path("D:/fable5_qwen3.7/rl_dataset/data/converted") / filename,
+            ]
+            file_path = next((p for p in candidates if p.exists()), candidates[0])
+
         if not file_path.exists():
-            # Fallback to local search
-            root_path = Path(__file__).resolve().parents[3]
-            alt_path = root_path / file_path
-            if alt_path.exists():
-                file_path = alt_path
-            else:
-                raise FileNotFoundError(f"Terminal pivot dataset not found: {file_path}")
+            raise FileNotFoundError(
+                f"Converted RL dataset not found at {file_path}. Run rl_dataset/convert_rl.py first."
+            )
 
+        task_config = TerminalPivotTaskConfig()
         count = 0
-        task_cfg = TerminalPivotTaskConfig()
+        skipped = 0
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with file_path.open("r", encoding="utf-8") as f:
             for line in f:
+                if not line.strip():
+                    continue
+
+                if skipped < self.config.start:
+                    skipped += 1
+                    continue
+
                 if self.config.num_tasks is not None and count >= self.config.num_tasks:
                     break
 
-                line_str = line.strip()
-                if not line_str:
-                    continue
-
-                raw = json.loads(line_str)
-                row = json.loads(line_str)
+                row = json.loads(line)
                 task_name = row.get("task_name", "")
-
-                if self.config.task_filter and self.config.task_filter.lower() not in task_name.lower():
+                if self.config.task_name_filter and self.config.task_name_filter not in task_name:
                     continue
 
-                prompt_messages = row.get("messages") or row.get("prompt") or []
+                raw_messages = row.get("messages") or row.get("prompt") or []
+                prompt_messages = prune_prompt_messages(raw_messages)
                 reference = row.get("reference_completion") or row.get("expected_assistant_response") or ""
-                data = TerminalPivotTaskData(
-                    idx=count,
+                task_data = TerminalPivotTaskData(
                     prompt=prompt_messages,
                     uuid=row.get("uuid", ""),
                     task_name=task_name,
                     trajectory_uid=row.get("trajectory_uid") or row.get("source_trajectory_uid") or "",
                     turn_index=row.get("turn_index", 0),
                     total_turns=row.get("total_turns", 1),
+                    domain=row.get("domain", "terminal"),
                     expected_answer_raw=row.get("expected_answer_raw", {}),
                     reference_completion=reference,
                 )
 
-                yield TerminalPivotTask(data=data, config=task_cfg)
+                yield TerminalPivotTask(data=task_data, config=task_config)
                 count += 1

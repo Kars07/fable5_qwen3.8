@@ -1,5 +1,5 @@
 max_steps = 50
-seq_len = 16384
+seq_len = 8192
 
 [model]
 name = "Qwen/Qwen3.8-27B"
@@ -15,8 +15,8 @@ post_batch_filters = []
 type = "grpo"
 
 [orchestrator.train.sampling]
-temperature = 0.9
-max_completion_tokens = 2048
+temperature = 0.8
+max_completion_tokens = 1024
 
 [[orchestrator.train.source]]
 name = "nemotron-terminal-train"
@@ -37,8 +37,8 @@ type = "subprocess"
 [inference]
 
 [inference.vllm]
-gpu_memory_utilization = 0.85
-max_model_len = 16384
+gpu_memory_utilization = 0.90
+max_model_len = 8192
 enforce_eager = true
 dtype = "bfloat16"
 trust_remote_code = true
@@ -48,8 +48,8 @@ fsdp_cpu_offload = true
 optim_cpu_offload = false
 
 [trainer.model.lora]
-rank = 64
-alpha = 128.0
+rank = 32
+alpha = 64.0
 dropout = 0.05
 target_modules = [
     "q_proj",
@@ -62,7 +62,7 @@ target_modules = [
 ]
 
 [trainer.optim]
-lr = 5.0e-6
+lr = 1.0e-5
 
 [ckpt]
 interval = 5
